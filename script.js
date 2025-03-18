@@ -550,79 +550,755 @@ function generatePDF() {
                     contentStartY = margin.top + 20;
                 }
                 
-                // Split content into lines that fit within page width
-                const contentLines = doc.splitTextToSize(contentText, usableWidth);
+                // Calculate paragraph gap based on line height and template
+                const paragraphGap = lineHeight * Math.min(paragraphSpacing, 1.5); // Cap the maximum spacing multiplier
                 
-                // Starting position for content - using the calculated Y position
-                let y = contentStartY;
-                
-                // Paragraph spacing (gap between paragraphs)
-                const paragraphGap = lineHeight * paragraphSpacing;
-                
-                // Define paragraph boundaries for better spacing (simple implementation)
-                const paragraphs = contentText.split('\n\n');
-                let currentLine = 0;
-                
-                // Process each paragraph separately
-                for (let p = 0; p < paragraphs.length; p++) {
-                    if (p > 0) {
-                        // Add paragraph spacing between paragraphs
-                        y += paragraphGap;
+                // Process preview content with HTML elements instead of plain text
+                const processHTML = (htmlContainer) => {
+                    // Starting position for content
+                    let yPos = contentStartY;
+                    let previousElementType = null; // Track previous element type to control spacing
+                    
+                    // Function to add appropriate spacing between elements
+                    const addElementSpacing = (currentElement, yPosition) => {
+                        // Don't add spacing at the very beginning
+                        if (yPosition === contentStartY) {
+                            return yPosition;
+                        }
+                        
+                        // Calculate base line height in mm
+                        const baseLineHeightMm = contentFontSize * 0.352778; // Convert pt to mm
+                        
+                        // Determine spacing based on element transitions
+                        if (previousElementType === 'heading' && currentElement === 'heading') {
+                            // Heading to heading - moderate spacing
+                            return yPosition + baseLineHeightMm * 0.8;
+                        } else if (previousElementType === 'paragraph' && currentElement === 'paragraph') {
+                            // Paragraph to paragraph - use a consistent fixed value rather than formula
+                            return yPosition + baseLineHeightMm * 1.2; // Reduced value
+                        } else if (previousElementType === 'list' && currentElement === 'list') {
+                            // List to list - reduced spacing
+                            return yPosition + baseLineHeightMm * 0.2;
+                        } else if ((previousElementType === 'blockquote' && currentElement === 'blockquote') ||
+                                   (previousElementType === 'img' && currentElement === 'img')) {
+                            // Blockquote to blockquote or image to image - moderate spacing
+                            return yPosition + baseLineHeightMm * 0.7;
+                        } else if ((previousElementType === 'paragraph' && currentElement === 'list') ||
+                                   (previousElementType === 'list' && currentElement === 'paragraph')) {
+                            // Paragraph to list or list to paragraph - slightly more space
+                            return yPosition + baseLineHeightMm * 0.9;
+                        } else {
+                            // Different element types - standard spacing
+                            return yPosition + baseLineHeightMm * 0.7; // Reduced from 0.8
+                        }
+                    };
+                    
+                    // Process each child node in the container
+                    for (let i = 0; i < htmlContainer.childNodes.length; i++) {
+                        const node = htmlContainer.childNodes[i];
+                        const isFirstElement = (i === 0);
+                        
+                        // Skip empty text nodes
+                        if (node.nodeType === Node.TEXT_NODE && node.textContent.trim() === '') {
+                            continue;
+                        }
+                        
+                        // Process based on node type
+                        if (node.nodeType === Node.ELEMENT_NODE) {
+                            // Element nodes - handle based on tag type
+                            const tagName = node.tagName.toLowerCase();
+                            
+                            // Add appropriate spacing (except for first element)
+                            if (!isFirstElement) {
+                                let elementType;
+                                if (['h1', 'h2', 'h3'].includes(tagName)) elementType = 'heading';
+                                else if (tagName === 'p') elementType = 'paragraph';
+                                else if (['ul', 'li'].includes(tagName)) elementType = 'list';
+                                else if (tagName === 'blockquote') elementType = 'blockquote';
+                                else if (tagName === 'img' || node.classList?.contains('image-placeholder')) elementType = 'img';
+                                else elementType = 'other';
+                                
+                                yPos = addElementSpacing(elementType, yPos);
+                                previousElementType = elementType;
+                            } else if (isFirstElement) {
+                                // Set previous element type for first element
+                                if (['h1', 'h2', 'h3'].includes(tagName)) previousElementType = 'heading';
+                                else if (tagName === 'p') previousElementType = 'paragraph';
+                                else if (['ul', 'li'].includes(tagName)) previousElementType = 'list';
+                                else if (tagName === 'blockquote') previousElementType = 'blockquote';
+                                else if (tagName === 'img' || node.classList?.contains('image-placeholder')) previousElementType = 'img';
+                                else previousElementType = 'other';
+                            }
+                            
+                            // Handle different HTML elements
+                            if (tagName === 'h1' || tagName === 'h2' || tagName === 'h3') {
+                                // Heading styling
+                                const headingText = node.textContent;
+                                let headingSize, headingStyle;
+                                
+                                if (tagName === 'h1') {
+                                    headingSize = contentFontSize * 1.5;
+                                    headingStyle = 'bold';
+                                } else if (tagName === 'h2') {
+                                    headingSize = contentFontSize * 1.3;
+                                    headingStyle = 'bold';
+                                } else { // h3
+                                    headingSize = contentFontSize * 1.1;
+                                    headingStyle = 'bolditalic';
+                                }
+                                
+                                // Check if we need a page break for this heading
+                                if (yPos + (headingSize * 0.352778 * 1.5) > pageHeight - margin.bottom - 15) {
+                                    doc.addPage();
+                                    addBackgroundToPage(doc, bgColor, colorClass, pageWidth, pageHeight);
+                                    resetTextStyles(doc, textColor, colorClass, pdfFont, contentStyle, contentFontSize);
+                                    yPos = margin.top + headerMargin;
+                                }
+                                
+                                // Render the heading
+                                doc.setFont(pdfFont, headingStyle);
+                                doc.setFontSize(headingSize);
+                                const headingLines = doc.splitTextToSize(headingText, usableWidth);
+                                doc.text(headingLines, margin.left, yPos);
+                                
+                                // Calculate heading height
+                                const headingLineHeight = headingSize * 0.352778 * 1.2;
+                                yPos += headingLines.length * headingLineHeight;
+                                
+                                // Add underline for h2 headings - thin line with template-appropriate color
+                                if (tagName === 'h2') {
+                                    // Set an appropriate color for the line
+                                    if (colorClass === 'blue') doc.setDrawColor(100, 149, 237); // cornflowerblue
+                                    else if (colorClass === 'green') doc.setDrawColor(46, 139, 87); // seagreen
+                                    else if (colorClass === 'purple') doc.setDrawColor(147, 112, 219); // mediumpurple
+                                    else if (colorClass === 'dark') doc.setDrawColor(240, 248, 255); // aliceblue
+                                    else doc.setDrawColor(180, 180, 180); // default gray
+                                    
+                                    // Calculate line position in relation to the text's baseline
+                                    // Use a small offset (1.2mm) from the current position for better visual connection to the text
+                                    const lineY = yPos - 1.2;
+                                    
+                                    doc.setLineWidth(0.4); // Thicker line for better visibility
+                                    doc.line(margin.left, lineY, margin.left + usableWidth * 0.4, lineY); // Longer line (40% of width)
+                                    doc.setLineWidth(0.1); // Reset line width
+                                    
+                                    // Add a small amount of spacing after the line
+                                    yPos += 1;
+                                }
+                                
+                                // Reset to normal content style
+                                doc.setFont(pdfFont, contentStyle);
+                                doc.setFontSize(contentFontSize);
+                                
+                            } else if (tagName === 'p') {
+                                // Check if paragraph contains only styled text or has mixed content
+                                if (node.childNodes.length === 1 && 
+                                    (node.childNodes[0].nodeType === Node.TEXT_NODE || 
+                                     ['strong', 'em', 'b', 'i'].includes(node.childNodes[0].tagName?.toLowerCase()))) {
+                                    // Simple paragraph with text only, process directly
+                                    yPos = processStyledText(node, yPos);
+                                } else {
+                                    // Complex paragraph with mixed elements, process each child
+                                    let originalYPos = yPos;
+                                    let maxLineWidth = 0;
+                                    
+                                    // Check if we need a page break
+                                    const estimatedHeight = estimateNodeHeight(node, lineHeight);
+                                    if (yPos + estimatedHeight > pageHeight - margin.bottom - 15) {
+                                        doc.addPage();
+                                        addBackgroundToPage(doc, bgColor, colorClass, pageWidth, pageHeight);
+                                        resetTextStyles(doc, textColor, colorClass, pdfFont, contentStyle, contentFontSize);
+                                        yPos = margin.top + headerMargin;
+                                        originalYPos = yPos;
+                                    }
+                                    
+                                    // Process each child with proper styling
+                                    let complexParaContent = '';
+                                    let complexParaSegments = [];
+
+                                    // Extract all styled segments from paragraph
+                                    extractTextSegments(node, complexParaSegments);
+
+                                    // Use the processStyledText directly with all segments
+                                    if (complexParaSegments.length > 0) {
+                                        yPos = processStyledText({
+                                            nodeType: Node.ELEMENT_NODE,
+                                            childNodes: [{
+                                                nodeType: Node.TEXT_NODE,
+                                                textContent: ' ', // This will be ignored as our enhanced function will focus on segments
+                                            }],
+                                            segments: complexParaSegments // Pass segments directly
+                                        }, yPos);
+                                    } else {
+                                        // Fallback to the previous approach if no segments found
+                                        for (let j = 0; j < node.childNodes.length; j++) {
+                                            const child = node.childNodes[j];
+                                            if (child.nodeType === Node.TEXT_NODE) {
+                                                // Regular text
+                                                const text = child.textContent.trim();
+                                                if (text) {
+                                                    doc.setFont(pdfFont, contentStyle);
+                                                    const textLines = doc.splitTextToSize(text, usableWidth - maxLineWidth);
+                                                    doc.text(textLines, margin.left + maxLineWidth, yPos);
+                                                    maxLineWidth += doc.getTextWidth(text + ' ');
+                                                    
+                                                    // Move to next line if needed
+                                                    if (margin.left + maxLineWidth > pageWidth - margin.right) {
+                                                        yPos += lineHeight;
+                                                        maxLineWidth = 0;
+                                                    }
+                                                }
+                                            } else if (child.nodeType === Node.ELEMENT_NODE) {
+                                                // Handle styled spans
+                                                if (['strong', 'b'].includes(child.tagName.toLowerCase())) {
+                                                    doc.setFont(pdfFont, 'bold');
+                                                    const text = child.textContent.trim();
+                                                    doc.text(text, margin.left + maxLineWidth, yPos);
+                                                    maxLineWidth += doc.getTextWidth(text + ' ');
+                                                } else if (['em', 'i'].includes(child.tagName.toLowerCase())) {
+                                                    doc.setFont(pdfFont, 'italic');
+                                                    const text = child.textContent.trim();
+                                                    doc.text(text, margin.left + maxLineWidth, yPos);
+                                                    maxLineWidth += doc.getTextWidth(text + ' ');
+                                                } else {
+                                                    // Other elements inside paragraph - handle recursively
+                                                    yPos = processNode(child, yPos);
+                                                }
+                                                
+                                                // Check line wrapping
+                                                if (margin.left + maxLineWidth > pageWidth - margin.right) {
+                                                    yPos += lineHeight;
+                                                    maxLineWidth = 0;
+                                                }
+                                                
+                                                // Reset style
+                                                doc.setFont(pdfFont, contentStyle);
+                                            }
+                                        }
+                                        
+                                        // Calculate final height of paragraph
+                                        if (maxLineWidth > 0) {
+                                            yPos += lineHeight; // Add final line height if we added content
+                                        }
+                                    }
+                                }
+                                
+                            } else if (tagName === 'strong' || tagName === 'em' || tagName === 'b' || tagName === 'i') {
+                                // Process inline styling directly - these should normally be inside paragraphs
+                                // but we'll handle them as standalone elements if needed
+                                yPos = processStyledText(node, yPos);
+                                
+                            } else if (tagName === 'blockquote') {
+                                // Handle blockquote with indentation and styling
+                                const blockquoteText = node.textContent;
+                                
+                                // Check for page break
+                                // Revised blockquote layout parameters 
+                                const linePosition = 4; // Position of vertical line from left margin
+                                const blockIndent = 10; // Text indentation from left margin
+                                const lineTextGap = 3; // Gap between line and text
+                                
+                                // Calculate usable width for text
+                                const blockTextWidth = usableWidth - (linePosition + lineTextGap) - 2;
+                                const blockLines = doc.splitTextToSize(blockquoteText, blockTextWidth);
+                                const estimatedHeight = blockLines.length * lineHeight + 10;
+                                
+                                if (yPos + estimatedHeight > pageHeight - margin.bottom - 15) {
+                                    doc.addPage();
+                                    addBackgroundToPage(doc, bgColor, colorClass, pageWidth, pageHeight);
+                                    resetTextStyles(doc, textColor, colorClass, pdfFont, contentStyle, contentFontSize);
+                                    yPos = margin.top + headerMargin;
+                                }
+                                
+                                // Add blockquote styling
+                                doc.setFont(pdfFont, contentStyle === 'normal' ? 'italic' : contentStyle);
+                                
+                                // Save current colors
+                                const currentDrawColor = doc.getDrawColor();
+                                
+                                // Set an appropriate color for the blockquote line
+                                if (colorClass === 'blue') doc.setDrawColor(100, 149, 237, 0.7); // cornflowerblue
+                                else if (colorClass === 'green') doc.setDrawColor(46, 139, 87, 0.7); // seagreen
+                                else if (colorClass === 'purple') doc.setDrawColor(147, 112, 219, 0.7); // mediumpurple
+                                else if (colorClass === 'dark') doc.setDrawColor(240, 248, 255, 0.7); // aliceblue
+                                else doc.setDrawColor(180, 180, 180, 0.7); // default gray
+                                
+                                // Draw left border for blockquote
+                                const blockStartY = yPos - 2;
+                                
+                                // Add extra padding above blockquote
+                                yPos += 1;
+                                
+                                // Position for text - explicitly place the text relative to line position
+                                const textX = margin.left + linePosition + lineTextGap;
+                                
+                                // Draw indented blockquote text
+                                doc.text(blockLines, textX, yPos);
+                                yPos += blockLines.length * lineHeight;
+                                
+                                // Draw the vertical line aligned with text
+                                doc.setLineWidth(0.5);
+                                doc.line(margin.left + linePosition, blockStartY, margin.left + linePosition, yPos - lineHeight + 2);
+                                doc.setLineWidth(0.1); // Reset line width
+                                
+                                // Add extra padding below blockquote
+                                yPos += 1;
+                                
+                                // Reset styles
+                                doc.setDrawColor(currentDrawColor);
+                                doc.setFont(pdfFont, contentStyle);
+                            } else if (tagName === 'ul') {
+                                // Process list items
+                                const bulletPosition = 3; // mm from left margin
+                                const bulletRadius = 1.5; // Size of bullet
+                                const listIndent = 12; // Text indentation (increased from 8)
+                                let lastItemBottomY = yPos;
+                                
+                                for (let j = 0; j < node.childNodes.length; j++) {
+                                    const listItem = node.childNodes[j];
+                                    if (listItem.nodeType === Node.ELEMENT_NODE && listItem.tagName.toLowerCase() === 'li') {
+                                        // Check for page break
+                                        if (yPos + lineHeight > pageHeight - margin.bottom - 15) {
+                                            doc.addPage();
+                                            addBackgroundToPage(doc, bgColor, colorClass, pageWidth, pageHeight);
+                                            resetTextStyles(doc, textColor, colorClass, pdfFont, contentStyle, contentFontSize);
+                                            yPos = margin.top + headerMargin;
+                                        }
+                                        
+                                        // Save fill color
+                                        const currentFillColor = doc.getFillColor();
+                                        
+                                        // Draw bullet point with template-appropriate color
+                                        if (colorClass === 'blue') doc.setFillColor(100, 149, 237); // cornflowerblue
+                                        else if (colorClass === 'green') doc.setFillColor(46, 139, 87); // seagreen
+                                        else if (colorClass === 'purple') doc.setFillColor(147, 112, 219); // mediumpurple
+                                        else if (colorClass === 'dark') doc.setFillColor(240, 248, 255); // aliceblue
+                                        else doc.setFillColor(100, 100, 100); // default darker gray
+                                        
+                                        // Adjust bullet position for better centering with text
+                                        const bulletYOffset = lineHeight * 0.35;
+                                        // Draw bullet as a solid circle
+                                        doc.circle(margin.left + bulletPosition, yPos - bulletYOffset, bulletRadius, 'F');
+                                        
+                                        // Reset fill color for text
+                                        doc.setFillColor(currentFillColor);
+                                        
+                                        // Reset text color explicitly
+                                        if (textColor) {
+                                            if (Array.isArray(textColor)) {
+                                                doc.setTextColor(textColor[0], textColor[1], textColor[2]);
+                                            } else {
+                                                doc.setTextColor(textColor);
+                                            }
+                                        } else if (colorClass === 'dark') {
+                                            doc.setTextColor(236, 240, 241);
+                                        } else {
+                                            doc.setTextColor(51, 51, 51);
+                                        }
+                                        
+                                        // Process list item content - check if it contains styled elements
+                                        if (listItem.childNodes.length === 1 && listItem.firstChild.nodeType === Node.TEXT_NODE) {
+                                            // Simple text item
+                                            const itemText = listItem.textContent.trim();
+                                            
+                                            // Use consistent indentation that accounts for bullet size and spacing
+                                            const textWidth = usableWidth - listIndent;
+                                            const listLines = doc.splitTextToSize(itemText, textWidth);
+                                            
+                                            // Properly align text with bullets
+                                            doc.text(listLines, margin.left + listIndent, yPos);
+                                            yPos += listLines.length * lineHeight;
+                                        } else {
+                                            // Complex list item with styling
+                                            // Save current margin for indented styling
+                                            const originalMargin = margin.left;
+                                            
+                                            // Temporarily increase the left margin for processing styled text
+                                            const tempMargin = margin.left;
+                                            margin.left += listIndent;
+                                            
+                                            // Create a temporary div to hold list item content for processing
+                                            let tempDiv = document.createElement('div');
+                                            for (let c = 0; c < listItem.childNodes.length; c++) {
+                                                tempDiv.appendChild(listItem.childNodes[c].cloneNode(true));
+                                            }
+                                            
+                                            // Process with indentation
+                                            const startYPos = yPos;
+                                            yPos = processStyledText(tempDiv, yPos);
+                                            
+                                            // Restore original margin
+                                            margin.left = tempMargin;
+                                            
+                                            // Add spacing after list item
+                                            lastItemBottomY = yPos;
+                                        }
+                                        
+                                        // Add small spacing between list items (less than paragraph spacing)
+                                        if (j < node.childNodes.length - 1) {
+                                            yPos += lineHeight * 0.2;
+                                        }
+                                        
+                                        lastItemBottomY = yPos;
+                                    }
+                                }
+                                
+                                // Set position after the last item
+                                yPos = lastItemBottomY;
+                                
+                            } else if (tagName === 'a') {
+                                // Handle links with special styling
+                                const linkText = node.textContent;
+                                const href = node.getAttribute('href');
+                                
+                                // Check for page break
+                                if (yPos + lineHeight > pageHeight - margin.bottom - 15) {
+                                    doc.addPage();
+                                    addBackgroundToPage(doc, bgColor, colorClass, pageWidth, pageHeight);
+                                    resetTextStyles(doc, textColor, colorClass, pdfFont, contentStyle, contentFontSize);
+                                    yPos = margin.top + headerMargin;
+                                }
+                                
+                                // Save current text color
+                                const currentTextColor = doc.getTextColor();
+                                
+                                // Set link color (appropriate for theme)
+                                if (colorClass === 'dark') {
+                                    doc.setTextColor(173, 216, 230); // light blue for dark theme
+                                } else if (colorClass === 'blue') {
+                                    doc.setTextColor(25, 25, 255); // darker blue for blue theme
+                                } else if (colorClass === 'green') {
+                                    doc.setTextColor(0, 100, 0); // dark green for green theme
+                                } else if (colorClass === 'purple') {
+                                    doc.setTextColor(75, 0, 130); // indigo for purple theme
+                                } else {
+                                    doc.setTextColor(0, 0, 238); // standard link blue
+                                }
+                                
+                                // Draw underlined link text
+                                const linkLines = doc.splitTextToSize(linkText, usableWidth);
+                                doc.text(linkLines, margin.left, yPos);
+                                
+                                // Underline the link text
+                                const textWidth = doc.getTextWidth(linkText);
+                                doc.line(margin.left, yPos + 1, margin.left + textWidth, yPos + 1);
+                                
+                                // Move position
+                                yPos += linkLines.length * lineHeight;
+                                
+                                // Reset text color
+                                doc.setTextColor(currentTextColor);
+                                
+                            } else if (tagName === 'img' || (tagName === 'div' && node.classList?.contains('image-placeholder'))) {
+                                // Handle image placeholders
+                                const imgHeight = 40; // Height of placeholder
+                                const imgAlt = node.alt || node.textContent || 'Image';
+                                
+                                // Check for page break
+                                if (yPos + imgHeight > pageHeight - margin.bottom - 15) {
+                                    doc.addPage();
+                                    addBackgroundToPage(doc, bgColor, colorClass, pageWidth, pageHeight);
+                                    resetTextStyles(doc, textColor, colorClass, pdfFont, contentStyle, contentFontSize);
+                                    yPos = margin.top + headerMargin;
+                                }
+                                
+                                // Save current states
+                                const currentDrawColor = doc.getDrawColor();
+                                const currentFillColor = doc.getFillColor();
+                                const currentTextColor = doc.getTextColor();
+                                const currentLineWidth = doc.getLineWidth();
+                                
+                                // Draw image placeholder rectangle with more visible styling
+                                if (colorClass === 'blue') {
+                                    doc.setDrawColor(70, 130, 180); // steelblue
+                                    doc.setFillColor(230, 240, 250); // lighter blue
+                                } else if (colorClass === 'green') {
+                                    doc.setDrawColor(46, 139, 87); // seagreen
+                                    doc.setFillColor(240, 255, 240); // honeydew
+                                } else if (colorClass === 'purple') {
+                                    doc.setDrawColor(138, 43, 226); // blueviolet
+                                    doc.setFillColor(248, 240, 255); // lavender
+                                } else if (colorClass === 'dark') {
+                                    doc.setDrawColor(169, 169, 169); // darkgray
+                                    doc.setFillColor(75, 75, 75); // custom darker gray
+                                } else {
+                                    doc.setDrawColor(100, 100, 100); // darker gray
+                                    doc.setFillColor(240, 240, 240); // light gray
+                                }
+                                
+                                // Draw with thicker lines and more visible design
+                                doc.setLineWidth(0.5);
+                                doc.roundedRect(margin.left, yPos, usableWidth, imgHeight, 3, 3, 'FD');
+                                
+                                // Draw an image icon in the left part of the placeholder
+                                const iconSize = 12;
+                                const iconMargin = 10;
+                                
+                                // Draw an image frame icon
+                                doc.rect(margin.left + iconMargin, yPos + (imgHeight/2) - (iconSize/2), iconSize, iconSize, 'S');
+                                // Draw mountain-like icon inside the frame
+                                const mountain1X = margin.left + iconMargin;
+                                const mountain1Y = yPos + (imgHeight/2) + (iconSize/2);
+                                const mountain2X = mountain1X + (iconSize * 0.3);
+                                const mountain2Y = mountain1Y - (iconSize * 0.5);
+                                const mountain3X = mountain2X + (iconSize * 0.3);
+                                const mountain3Y = mountain1Y - (iconSize * 0.3);
+                                const mountain4X = mountain3X + (iconSize * 0.4);
+                                const mountain4Y = mountain1Y;
+                                
+                                doc.lines([[mountain2X - mountain1X, mountain2Y - mountain1Y], 
+                                            [mountain3X - mountain2X, mountain3Y - mountain2Y],
+                                            [mountain4X - mountain3X, mountain4Y - mountain3Y]], 
+                                            mountain1X, mountain1Y);
+                                
+                                // Add placeholder text
+                                doc.setFont(pdfFont, 'italic');
+                                if (colorClass === 'dark') {
+                                    doc.setTextColor(200, 200, 200); // Lighter text for dark theme
+                                } else {
+                                    doc.setTextColor(80, 80, 80); // Darker text for better contrast
+                                }
+
+                                let placeholderText = '[Image Placeholder]';
+                                // If we have alt text, use it
+                                if (imgAlt && imgAlt.trim() !== '' && imgAlt !== 'Image') {
+                                    placeholderText = `[Image: ${imgAlt.substring(0, 30)}${imgAlt.length > 30 ? '...' : ''}]`;
+                                }
+
+                                doc.text(placeholderText, margin.left + iconMargin + iconSize + 5, 
+                                         yPos + imgHeight/2, {
+                                            align: 'left',
+                                            baseline: 'middle'
+                                         });
+                                
+                                // Reset styling
+                                doc.setDrawColor(currentDrawColor);
+                                doc.setFillColor(currentFillColor);
+                                doc.setTextColor(currentTextColor);
+                                doc.setLineWidth(currentLineWidth);
+                                doc.setFont(pdfFont, contentStyle);
+                                
+                                // Move position past image placeholder
+                                yPos += imgHeight + 5; // Add extra spacing
+                            }
+                        } else if (node.nodeType === Node.TEXT_NODE) {
+                            // Text node - render as normal paragraph if it contains actual content
+                            const text = node.textContent.trim();
+                            if (text) {
+                                // Add appropriate spacing if not first element
+                                if (!isFirstElement) {
+                                    yPos = addElementSpacing('paragraph', yPos);
+                                    previousElementType = 'paragraph';
+                                }
+                                
+                                // Check for page break
+                                const textLines = doc.splitTextToSize(text, usableWidth);
+                                
+                                if (yPos + (textLines.length * lineHeight) > pageHeight - margin.bottom - 15) {
+                                    doc.addPage();
+                                    addBackgroundToPage(doc, bgColor, colorClass, pageWidth, pageHeight);
+                                    resetTextStyles(doc, textColor, colorClass, pdfFont, contentStyle, contentFontSize);
+                                    yPos = margin.top + headerMargin;
+                                }
+                                
+                                // Render text
+                                doc.text(textLines, margin.left, yPos);
+                                yPos += textLines.length * lineHeight;
+                            }
+                        }
                     }
                     
-                    // Get lines for this paragraph
-                    const paragraphLines = doc.splitTextToSize(paragraphs[p], usableWidth);
+                    return yPos;
+                };
+                
+                // Helper function to process individual nodes
+                const processNode = (node, startY) => {
+                    // Implementation would be similar to parts of processHTML
+                    // This is a simplified version just to handle nested elements in complex paragraphs
+                    let yPos = startY;
                     
-                    // Apply template-specific paragraph styling if needed
-                    if (templateClass === 'modern' && paragraphs[p].trim().length > 0 && p === 0) {
-                        // For modern template, make first paragraph slightly larger
-                        const savedSize = contentFontSize;
-                        doc.setFontSize(contentFontSize * 1.1);
-                        // Recalculate line height for this paragraph
-                        const specialLineHeight = (contentFontSize * 1.1) * 0.352778 * adjustedLineHeightMultiplier;
-                        
-                        // Check for page break
-                        if (y + (paragraphLines.length * specialLineHeight) > pageHeight - margin.bottom) {
-                            doc.addPage();
-                            addBackgroundToPage(doc, bgColor, colorClass, pageWidth, pageHeight);
-                            resetTextStyles(doc, textColor, colorClass, pdfFont, contentStyle, contentFontSize);
-                            // Start at margin.top + headerMargin to leave space for header
-                            y = margin.top + headerMargin;
+                    if (node.nodeType === Node.TEXT_NODE) {
+                        const text = node.textContent.trim();
+                        if (text) {
+                            const textLines = doc.splitTextToSize(text, usableWidth);
+                            doc.text(textLines, margin.left, yPos);
+                            yPos += textLines.length * lineHeight;
+                        }
+                    } else if (node.nodeType === Node.ELEMENT_NODE) {
+                        // Simple element handling - could be expanded for more complex nesting
+                        const tagName = node.tagName.toLowerCase();
+                        if (['strong', 'b'].includes(tagName)) {
+                            doc.setFont(pdfFont, 'bold');
+                        } else if (['em', 'i'].includes(tagName)) {
+                            doc.setFont(pdfFont, 'italic');
                         }
                         
-                        // Add the paragraph with special styling
-                        for (let i = 0; i < paragraphLines.length; i++) {
-                            doc.text(paragraphLines[i], margin.left, y);
-                            y += specialLineHeight;
+                        const text = node.textContent.trim();
+                        if (text) {
+                            const textLines = doc.splitTextToSize(text, usableWidth);
+                            doc.text(textLines, margin.left, yPos);
+                            yPos += textLines.length * lineHeight;
                         }
                         
-                        // Reset font size
-                        doc.setFontSize(savedSize);
+                        // Reset font
+                        doc.setFont(pdfFont, contentStyle);
+                    }
+                    
+                    return yPos;
+                };
+                
+                // Helper function to estimate node height
+                const estimateNodeHeight = (node, lineHeight) => {
+                    // This is a rough estimate - actual height may vary
+                    const text = node.textContent;
+                    const lines = Math.ceil(text.length / 80); // Rough estimate of characters per line
+                    return lines * lineHeight * 1.2; // Add 20% for safety
+                };
+                
+                // Function to process text with inline styling (bold/italic/etc)
+                const processStyledText = (element, startY) => {
+                    let yPos = startY;
+                    let segments = [];
+                    
+                    // Check if segments were passed directly (from complex paragraph handling)
+                    if (element.segments && element.segments.length > 0) {
+                        segments = element.segments;
                     } else {
-                        // Check for page break
-                        if (y + (paragraphLines.length * lineHeight) > pageHeight - margin.bottom) {
-                            doc.addPage();
-                            addBackgroundToPage(doc, bgColor, colorClass, pageWidth, pageHeight);
-                            resetTextStyles(doc, textColor, colorClass, pdfFont, contentStyle, contentFontSize);
-                            // Start at margin.top + headerMargin to leave space for header
-                            y = margin.top + headerMargin;
+                        // Extract all text segments with their styling
+                        extractTextSegments(element, segments);
+                    }
+                    
+                    // No segments? Return early
+                    if (segments.length === 0) return yPos;
+                    
+                    // Check for page break - estimate height based on text length
+                    let combinedText = segments.map(s => s.text).join(' ');
+                    const estimatedLines = Math.ceil(doc.getTextWidth(combinedText) / usableWidth) + 1;
+                    if (yPos + (estimatedLines * lineHeight) > pageHeight - margin.bottom - 15) {
+                        doc.addPage();
+                        addBackgroundToPage(doc, bgColor, colorClass, pageWidth, pageHeight);
+                        resetTextStyles(doc, textColor, colorClass, pdfFont, contentStyle, contentFontSize);
+                        yPos = margin.top + headerMargin;
+                    }
+                    
+                    try {
+                        // Begin with x at margin
+                        let currentX = margin.left;
+                        let lastSpaceX = margin.left;
+                        let lastSpaceIndex = -1;
+                        let currentLineStart = 0;
+                        let currentY = yPos;
+                        
+                        // Work through all segments as a single flow
+                        for (let i = 0; i < segments.length; i++) {
+                            const segment = segments[i];
+                            
+                            // Apply appropriate styling
+                            let fontStyle = contentStyle;
+                            if (segment.bold && segment.italic) fontStyle = "bolditalic";
+                            else if (segment.bold) fontStyle = "bold";
+                            else if (segment.italic) fontStyle = "italic";
+                            doc.setFont(pdfFont, fontStyle);
+                            
+                            // Process words separately to handle line breaks correctly
+                            const words = segment.text.split(/\s+/);
+                            for (let w = 0; w < words.length; w++) {
+                                const word = words[w];
+                                if (!word) continue; // Skip empty words
+                                
+                                // Calculate word width (add space unless it's the last word in text)
+                                const isLastWord = (i === segments.length - 1 && w === words.length - 1);
+                                const wordWithSpace = isLastWord ? word : word + ' ';
+                                const wordWidth = doc.getTextWidth(wordWithSpace);
+                                
+                                // Check if we need to wrap to next line
+                                if (currentX + wordWidth > pageWidth - margin.right && currentX > margin.left) {
+                                    // Move to next line
+                                    currentY += lineHeight;
+                                    currentX = margin.left;
+                                    currentLineStart = i;
+                                    
+                                    // Check for page break
+                                    if (currentY > pageHeight - margin.bottom - 15) {
+                                        doc.addPage();
+                                        addBackgroundToPage(doc, bgColor, colorClass, pageWidth, pageHeight);
+                                        resetTextStyles(doc, textColor, colorClass, pdfFont, contentStyle, contentFontSize);
+                                        currentY = margin.top + headerMargin;
+                                    }
+                                    
+                                    // Reapply current segment's styling
+                                    doc.setFont(pdfFont, fontStyle);
+                                }
+                                
+                                // Render word at current position
+                                doc.text(word, currentX, currentY);
+                                
+                                // Move position and track spaces for potential line breaks
+                                currentX += wordWidth;
+                                if (!isLastWord) {
+                                    lastSpaceX = currentX - doc.getTextWidth(' ');
+                                    lastSpaceIndex = i;
+                                }
+                            }
                         }
                         
-                        // Add the paragraph with normal styling
-                        for (let i = 0; i < paragraphLines.length; i++) {
-                            doc.text(paragraphLines[i], margin.left, y);
-                            y += lineHeight;
+                        // Reset font and update Y position - always move down by one line height
+                        doc.setFont(pdfFont, contentStyle);
+                        return currentY + lineHeight;
+                    } catch (styleError) {
+                        console.error("Advanced styled text rendering failed:", styleError);
+                        
+                        // Fall back to simple rendering with no styling
+                        doc.setFont(pdfFont, contentStyle);
+                        const plainText = segments.map(s => s.text).join(' ');
+                        const textLines = doc.splitTextToSize(plainText, usableWidth);
+                        doc.text(textLines, margin.left, yPos);
+                        return yPos + textLines.length * lineHeight;
+                    }
+                };
+                
+                // Function to extract text segments with styling
+                const extractTextSegments = (node, segments, currentStyle = {}) => {
+                    if (node.nodeType === Node.TEXT_NODE) {
+                        // Plain text node
+                        const trimmed = node.textContent.trim();
+                        if (trimmed) {
+                            segments.push({
+                                text: trimmed,
+                                bold: currentStyle.bold || false,
+                                italic: currentStyle.italic || false
+                            });
+                        }
+                    } else if (node.nodeType === Node.ELEMENT_NODE) {
+                        // Element node - check for styling elements
+                        const tagName = node.tagName.toLowerCase();
+                        let newStyle = {...currentStyle};
+                        
+                        if (tagName === 'strong' || tagName === 'b') {
+                            newStyle.bold = true;
+                        } else if (tagName === 'em' || tagName === 'i') {
+                            newStyle.italic = true;
+                        }
+                        
+                        // Process child nodes with updated style
+                        for (let i = 0; i < node.childNodes.length; i++) {
+                            extractTextSegments(node.childNodes[i], segments, newStyle);
                         }
                     }
-                }
+                };
+                
+                // Process the entire HTML content
+                processHTML(previewContent);
+                
             } catch (contentError) {
                 console.error("Error rendering content with custom font:", contentError);
-                // Fall back to standard font
+                // Fall back to standard font and basic rendering
                 doc.setFont("helvetica", contentStyle);
-                const contentLines = doc.splitTextToSize(contentText, usableWidth);
+                doc.text("Error rendering formatted content. Displaying basic text:", margin.left, contentStartY);
                 
-                // Use a safe starting Y position
-                const safeY = contentStartY || margin.top + 20;
+                // Render basic text version
+                const contentLines = doc.splitTextToSize(contentText, usableWidth);
+                const safeY = contentStartY + 10;
                 doc.text(contentLines, margin.left, safeY);
             }
             
@@ -651,9 +1327,28 @@ function generatePDF() {
                 doc.setDrawColor(200, 200, 200);
                 doc.line(margin.left, margin.top + 3, pageWidth - margin.right, margin.top + 3);
                 
-                // Add page numbers at bottom
-                doc.setFontSize(10);
-                doc.text(`Page ${i} of ${totalPages}`, pageWidth - margin.right - 25, pageHeight - 10);
+                // Add page numbers and footer
+                doc.setFontSize(9);
+                
+                // Add a subtle horizontal separator line above the footer
+                doc.setDrawColor(180, 180, 180);
+                doc.line(margin.left, pageHeight - margin.bottom + 5, pageWidth - margin.right, pageHeight - margin.bottom + 5);
+                
+                // Add page number centered
+                doc.text(`Page ${i} of ${totalPages}`, pageWidth / 2, pageHeight - margin.bottom + 15, {
+                    align: 'center'
+                });
+                
+                // Add date on the left
+                const today = new Date();
+                const dateStr = today.toLocaleDateString();
+                doc.text(dateStr, margin.left, pageHeight - margin.bottom + 15);
+                
+                // Add template info on right (optional)
+                const templateInfo = `${templateClass.charAt(0).toUpperCase() + templateClass.slice(1)} Style`;
+                doc.text(templateInfo, pageWidth - margin.right, pageHeight - margin.bottom + 15, {
+                    align: 'right'
+                });
             }
             
             // Save the PDF
@@ -700,16 +1395,20 @@ function parseMarkdown(text) {
     text = text.replace(/\*\*(.*?)\*\*/gm, '<strong>$1</strong>');
     text = text.replace(/\*(.*?)\*/gm, '<em>$1</em>');
     
-    // Lists
-    text = text.replace(/^\- (.*$)/gm, '<li>$1</li>');
+    // Images - add support for image placeholders
+    text = text.replace(/!\[(.*?)\]\((.*?)\)/gm, '<img src="$2" alt="$1">');
     
-    // Group list items
+    // Lists - improved regular expression for bullet lists
+    text = text.replace(/^[\s]*?[-*] (.*$)/gm, '<li>$1</li>');
+    
+    // Group list items with better handling of nested content
     let inList = false;
     const lines = text.split('\n');
     const processedLines = [];
     
     for (let i = 0; i < lines.length; i++) {
         const line = lines[i];
+        const trimmed = line.trim();
         
         if (line.includes('<li>')) {
             if (!inList) {
@@ -719,10 +1418,17 @@ function parseMarkdown(text) {
             processedLines.push(line);
         } else {
             if (inList) {
-                processedLines.push('</ul>');
-                inList = false;
+                // Don't close the list if this is an empty line followed by another list item
+                if (trimmed === '' && i + 1 < lines.length && lines[i + 1].includes('<li>')) {
+                    processedLines.push(''); // Keep the blank line
+                } else {
+                    processedLines.push('</ul>');
+                    inList = false;
+                    processedLines.push(line);
+                }
+            } else {
+                processedLines.push(line);
             }
-            processedLines.push(line);
         }
     }
     
@@ -735,15 +1441,22 @@ function parseMarkdown(text) {
     // Links
     text = text.replace(/\[([^\]]+)\]\(([^)]+)\)/gm, '<a href="$2">$1</a>');
     
-    // Paragraphs - wrap non-tagged content in <p> tags
+    // Blockquotes
+    text = text.replace(/^> (.*$)/gm, '<blockquote>$1</blockquote>');
+    
+    // Paragraphs - wrap non-tagged content in <p> tags, with improved handling
     const paragraphLines = text.split('\n\n');
     const processedParagraphs = paragraphLines.map(para => {
+        const trimmedPara = para.trim();
         // Skip if paragraph already has HTML tags
-        if (para.trim().startsWith('<') && !para.trim().startsWith('<li>')) {
+        if (trimmedPara.startsWith('<') && 
+            !trimmedPara.startsWith('<li>') && 
+            !trimmedPara.startsWith('<strong>') && 
+            !trimmedPara.startsWith('<em>')) {
             return para;
         }
         // Skip empty paragraphs
-        if (!para.trim()) {
+        if (!trimmedPara) {
             return '';
         }
         return `<p>${para}</p>`;
@@ -768,11 +1481,48 @@ function updatePreviewWithMarkdown() {
     
     // Parse the rest of the content as markdown
     const restOfContent = lines.slice(1).join('\n');
-    previewContent.innerHTML = parseMarkdown(restOfContent) || 'Your content will appear here...';
+    const parsedContent = parseMarkdown(restOfContent) || 'Your content will appear here...';
+    
+    // Add the parsed content to the preview
+    previewContent.innerHTML = parsedContent;
+    
+    // Process image markdown if any was used
+    checkAndCreateImagePlaceholders();
     
     // Update styling
     pdfPreview.className = `preview-container ${templateClass} ${colorClass}`;
     pdfPreview.style.fontFamily = fontFamily;
+}
+
+// Function to ensure image markdown is rendered as placeholders
+function checkAndCreateImagePlaceholders() {
+    // Find all image tags
+    const imgTags = previewContent.querySelectorAll('img');
+    
+    // Replace each image tag with a placeholder div
+    imgTags.forEach(img => {
+        const alt = img.getAttribute('alt') || 'Image';
+        const src = img.getAttribute('src') || '#';
+        
+        // Create a placeholder div
+        const placeholder = document.createElement('div');
+        placeholder.className = 'image-placeholder';
+        placeholder.style.border = '1px dashed #999';
+        placeholder.style.borderRadius = '4px';
+        placeholder.style.padding = '15px';
+        placeholder.style.margin = '10px 0';
+        placeholder.style.backgroundColor = '#f8f8f8';
+        placeholder.style.textAlign = 'center';
+        
+        // Add icon and text
+        placeholder.innerHTML = `
+            <div style="margin-bottom: 8px;">📷</div>
+            <div style="font-style: italic; color: #666;">[Image: ${alt}]</div>
+        `;
+        
+        // Replace the image with the placeholder
+        img.parentNode.replaceChild(placeholder, img);
+    });
 }
 
 // Event listeners

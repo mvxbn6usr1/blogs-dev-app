@@ -110,3 +110,6 @@ If using the unbundled dist/html2pdf.min.js (or its un-minified version), you mu
 <script src="html2canvas.min.js"></script>
 <script src="html2pdf.min.js"></script>
 Contributing
+
+
+brilliant now impliment the ability to add a custom header to the preview and pdf we should also be able compose a document header using an editor in the app interface that creates the needed html  html that may be composed of images and text as well as footers to go on each page these can then be used as is or enchanced by cluade like the body 
