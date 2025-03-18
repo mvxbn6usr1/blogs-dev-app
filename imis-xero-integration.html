@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>iMIS to Xero Integration</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f8f9fa;
+            color: #333;
+            line-height: 1.6;
+        }
+        
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+        
+        h1 {
+            color: #2c3e50;
+            font-size: 28px;
+            margin-bottom: 20px;
+        }
+        
+        p {
+            margin-bottom: 20px;
+            font-size: 16px;
+        }
+        
+        .integration-diagram {
+            display: flex;
+            justify-content: space-between;
+            gap: 30px;
+            margin: 40px 0;
+        }
+        
+        .method {
+            flex: 1;
+            background-color: white;
+            border-radius: 5px;
+            padding: 20px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+            position: relative; /* For absolute positioning of arrows */
+        }
+        
+        .method-title {
+            color: #4a86e8;
+            font-size: 24px;
+            margin-bottom: 15px;
+        }
+        
+        .top-row, .bottom-row {
+            display: flex;
+            justify-content: space-between;
+            margin: 20px 0;
+            position: relative; /* For positioning arrows */
+        }
+        
+        .system-box {
+            border: 2px solid #4a86e8;
+            border-radius: 4px;
+            padding: 15px 25px;
+            text-align: center;
+            font-weight: bold;
+            background-color: white;
+            position: relative; /* For connecting lines */
+            min-width: 80px;
+            z-index: 2;
+        }
+        
+        .transaction-box {
+            border: 1px dashed #4a86e8;
+            border-radius: 4px;
+            padding: 15px;
+            text-align: center;
+            background-color: #f0f8ff;
+            color: #4a86e8;
+            width: 150px;
+            position: relative; /* For connecting lines */
+            z-index: 2;
+        }
+        
+        /* Horizontal arrow between system boxes */
+        .horizontal-arrow {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translateY(-50%);
+            width: 100px; /* Will be set by JS */
+            height: 2px;
+            background-color: #4a86e8;
+        }
+        
+        .horizontal-arrow::after {
+            content: '';
+            position: absolute;
+            right: 0;
+            top: -4px;
+            width: 0;
+            height: 0;
+            border-left: 8px solid #4a86e8;
+            border-top: 5px solid transparent;
+            border-bottom: 5px solid transparent;
+        }
+        
+        /* Vertical connecting lines from system boxes to transaction boxes */
+        .vertical-line {
+            position: absolute;
+            width: 2px;
+            background-color: #4a86e8;
+            z-index: 1;
+        }
+        
+        .footer {
+            text-align: center;
+            margin-top: 60px;
+            color: #666;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>iMIS to Xero Integration</h1>
+        
+        <p>To address these concerns, iFINITY has developed a couple of standard API integrations that automatically post financial transactions from iMIS to Xero overnight.</p>
+
+        <div class="integration-diagram">
+            <!-- Method 1 -->
+            <div class="method" id="method1">
+                <h2 class="method-title">1. Journal Entry Method</h2>
+                <p>Post only journal entries against nominal codes to the associated ledgers in Xero.</p>
+                
+                <div class="top-row">
+                    <div class="system-box" id="imis1">iMIS</div>
+                    <div class="system-box" id="xero1">Xero</div>
+                </div>
+                
+                <div class="bottom-row">
+                    <div class="transaction-box" id="transactions1">Financial Transactions</div>
+                    <div class="transaction-box" id="entries1">Journal Entries to Nominal Ledgers</div>
+                </div>
+            </div>
+            
+            <!-- Method 2 -->
+            <div class="method" id="method2">
+                <h2 class="method-title">2. Direct Transaction Method</h2>
+                <p>Create invoice (and credit note) and payment (and refund) entries directly in Xero.</p>
+                
+                <div class="top-row">
+                    <div class="system-box" id="imis2">iMIS</div>
+                    <div class="system-box" id="xero2">Xero</div>
+                </div>
+                
+                <div class="bottom-row">
+                    <div class="transaction-box" id="transactions2">Invoices & Payments</div>
+                    <div class="transaction-box" id="entries2">Direct Transaction Entries</div>
+                </div>
+            </div>
+        </div>
+        
+        <p>We have clients successfully using both methods.</p>
+        
+        <div class="footer">
+            <p>© iFINITY - Advanced Solutions International</p>
+        </div>
+        
+        <script>
+            // Function to add arrows and connecting lines
+            function addConnections() {
+                // Method 1 connections
+                addHorizontalArrow('imis1', 'xero1');
+                addVerticalLine('imis1', 'transactions1');
+                addVerticalLine('xero1', 'entries1');
+                
+                // Method 2 connections
+                addHorizontalArrow('imis2', 'xero2');
+                addVerticalLine('imis2', 'transactions2');
+                addVerticalLine('xero2', 'entries2');
+            }
+            
+            // Add horizontal arrow between two elements
+            function addHorizontalArrow(fromId, toId) {
+                const fromEl = document.getElementById(fromId);
+                const toEl = document.getElementById(toId);
+                const fromRect = fromEl.getBoundingClientRect();
+                const toRect = toEl.getBoundingClientRect();
+                
+                const arrow = document.createElement('div');
+                arrow.className = 'horizontal-arrow';
+                
+                // Get parent rectangle
+                const parentRect = fromEl.parentNode.getBoundingClientRect();
+                
+                // Position arrow
+                arrow.style.left = (fromRect.right - parentRect.left) + 'px';
+                arrow.style.width = (toRect.left - fromRect.right) + 'px';
+                
+                fromEl.parentNode.appendChild(arrow);
+            }
+            
+            // Add vertical connecting line from top element to bottom element
+            function addVerticalLine(topId, bottomId) {
+                const topEl = document.getElementById(topId);
+                const bottomEl = document.getElementById(bottomId);
+                const topRect = topEl.getBoundingClientRect();
+                const bottomRect = bottomEl.getBoundingClientRect();
+                
+                const line = document.createElement('div');
+                line.className = 'vertical-line';
+                
+                // Get method rectangle for relative positioning
+                const methodRect = topEl.closest('.method').getBoundingClientRect();
+                
+                // Position the line
+                line.style.left = (topRect.left + topRect.width/2 - methodRect.left) + 'px';
+                line.style.top = (topRect.bottom - methodRect.top) + 'px';
+                line.style.height = (bottomRect.top - topRect.bottom) + 'px';
+                
+                topEl.closest('.method').appendChild(line);
+            }
+            
+            // Run when DOM is fully loaded
+            document.addEventListener('DOMContentLoaded', addConnections);
+        </script>
+    </div>
+</body>
+</html>

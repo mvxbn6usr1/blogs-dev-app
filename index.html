@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Intelligent PDF Generator</title>
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&family=Georgia&family=Palatino+Linotype&family=Palatino&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <h1>Intelligent PDF Generator</h1>
+        
+        <div class="input-section">
+            <h2>Enter Your Content</h2>
+            <textarea id="contentInput" placeholder="Enter your content here..."></textarea>
+            
+            <div class="ai-options">
+                <h3>Claude AI Enhancement</h3>
+                <p class="ai-description">Let Claude AI analyze your content and enhance it with proper structure, suggested illustrations, pull quotes, and other design elements.</p>
+                
+                <div class="option-group">
+                    <label for="aiEnhanceLevel">Enhancement Level:</label>
+                    <select id="aiEnhanceLevel">
+                        <option value="light">Light (Structure Only)</option>
+                        <option value="medium" selected>Medium (Structure & Suggestions)</option>
+                        <option value="full">Full (Complete Document Design)</option>
+                    </select>
+                </div>
+                
+                <div class="option-group">
+                    <label for="documentType">Document Type:</label>
+                    <select id="documentType">
+                        <option value="article">Article</option>
+                        <option value="report">Report</option>
+                        <option value="academic">Academic Paper</option>
+                        <option value="blog">Blog Post</option>
+                    </select>
+                </div>
+                
+                <div class="api-key-section">
+                    <label for="apiKey">Claude API Key:</label>
+                    <input type="password" id="apiKey" placeholder="Enter your Claude API key">
+                    <p class="api-note">Your API key is used to enhance your content and is never stored permanently.</p>
+                </div>
+                
+                <button id="enhanceBtn" class="secondary-btn">Enhance with Claude AI</button>
+            </div>
+            
+            <div class="ai-status hidden">
+                <div class="loading-spinner"></div>
+                <p id="aiStatusMessage">Claude is analyzing your content...</p>
+            </div>
+            
+            <div class="styling-options">
+                <h3>Styling Options</h3>
+                
+                <div class="option-group">
+                    <label for="templateSelect">Template:</label>
+                    <select id="templateSelect">
+                        <option value="elegant">Elegant</option>
+                        <option value="modern">Modern</option>
+                        <option value="minimal">Minimal</option>
+                        <option value="academic">Academic</option>
+                    </select>
+                </div>
+                
+                <div class="option-group">
+                    <label for="fontSelect">Font:</label>
+                    <select id="fontSelect">
+                        <option value="Georgia, serif">Georgia</option>
+                        <option value="'Helvetica Neue', sans-serif">Helvetica</option>
+                        <option value="'Palatino Linotype', serif">Palatino Linotype</option>
+                        <option value="'Palatino', serif">Palatino</option>
+                        <option value="'Roboto', sans-serif">Roboto</option>
+                    </select>
+                </div>
+                
+                <div class="option-group">
+                    <label for="colorSelect">Color Theme:</label>
+                    <select id="colorSelect">
+                        <option value="blue">Blue</option>
+                        <option value="green">Green</option>
+                        <option value="purple">Purple</option>
+                        <option value="dark">Dark</option>
+                    </select>
+                </div>
+            </div>
+            
+            <button id="generateBtn">Generate PDF</button>
+        </div>
+        
+        <div class="preview-section">
+            <h2>Preview</h2>
+            <div class="preview-tabs">
+                <button class="tab-btn active" data-tab="preview">Visual Preview</button>
+                <button class="tab-btn" data-tab="markup">Enhanced Markup</button>
+            </div>
+            <div id="previewTab" class="tab-content active">
+                <div id="pdfPreview" class="preview-container elegant">
+                    <div class="pdf-content">
+                        <div id="previewTitle">Your Title</div>
+                        <div id="previewContent">Your content will appear here...</div>
+                    </div>
+                </div>
+            </div>
+            <div id="markupTab" class="tab-content">
+                <pre id="markupPreview" class="markup-code">Your enhanced markup will appear here...</pre>
+            </div>
+        </div>
+    </div>
+    
+    <script src="script.js"></script>
+    <script src="claude-api.js"></script>
+</body>
+</html>

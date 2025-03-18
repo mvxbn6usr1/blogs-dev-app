@@ -1,0 +1,19 @@
+name = "intelligent-pdf-generator"
+main = "worker.js"
+compatibility_date = "2023-03-01"
+compatibility_flags = ["nodejs_compat"]
+
+# Static site configuration
+[site]
+bucket = "./dist"
+
+[vars]
+ALLOWED_ORIGINS = "https://pdfs.delcarion.co.uk,http://localhost:3000,https://intelligent-pdf-generator.hrhxyyydnw.workers.dev"
+
+# Enable workers.dev subdomain 
+workers_dev = true
+
+# Custom domain routes when domain is ready
+# [[routes]]
+# pattern = "pdfs.delcarion.co.uk/*"
+# zone_name = "delcarion.co.uk"
